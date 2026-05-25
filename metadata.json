@@ -1,0 +1,6 @@
+{
+  "name": "Cinemood Urls",
+  "description": "A futuristic, cinematic multi-link sharing platform. Save, design, and share gorgeous link collections instantly with a premium, glowing mobile-first user experience.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
