@@ -147,7 +147,19 @@ export async function fetchAllCollections(): Promise<Collection[]> {
   if (hasMongo && mongooseConnected) {
     try {
       const documents = await MongoCollection.find({}).lean();
-      return documents as unknown as Collection[];
+      const collections = documents as unknown as Collection[];
+      const now = new Date();
+      const valid: Collection[] = [];
+      for (const col of collections) {
+        if (col.expiresAt && new Date(col.expiresAt) < now) {
+          MongoCollection.deleteOne({ id: col.id }).catch((e: any) => {
+            console.error("Failed to delete expired Mongo collection:", e);
+          });
+        } else {
+          valid.push(col);
+        }
+      }
+      return valid;
     } catch (err) {
       console.error("Mongoose fetchAll collections failed:", err);
     }

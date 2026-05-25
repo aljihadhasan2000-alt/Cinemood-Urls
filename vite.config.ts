@@ -59,6 +59,20 @@ export default defineConfig(() => {
                   return handler(req, res);
                 }
 
+                const getMatch = pathname.match(/^\/api\/get\/([^/]+)$/);
+                if (getMatch) {
+                  req.query.slug = getMatch[1];
+                  const { default: handler } = await server.ssrLoadModule('/api/get/[slug].ts');
+                  return handler(req, res);
+                }
+
+                const deleteMatch = pathname.match(/^\/api\/delete\/([^/]+)$/);
+                if (deleteMatch) {
+                  req.query.slug = deleteMatch[1];
+                  const { default: handler } = await server.ssrLoadModule('/api/delete/[slug].ts');
+                  return handler(req, res);
+                }
+
                 const verifyPasswordMatch = pathname.match(/^\/api\/collections\/([^/]+)\/verify-password$/);
                 if (verifyPasswordMatch) {
                   req.query.slug = verifyPasswordMatch[1];

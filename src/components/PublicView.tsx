@@ -50,7 +50,7 @@ export function PublicView({ slug }: PublicViewProps) {
         headers["x-cinemood-password"] = passwordCode;
       }
 
-      const res = await fetch(`/api/collections/${slug}`, {
+      const res = await fetch(`/api/get/${slug}`, {
         headers
       });
 

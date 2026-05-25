@@ -47,7 +47,7 @@ export function AnalyticsView({ slug, onNavigate }: AnalyticsViewProps) {
         headers["x-cinemood-password"] = passwordCode;
       }
 
-      const res = await fetch(`/api/collections/${slug}`, {
+      const res = await fetch(`/api/get/${slug}`, {
         headers
       });
 

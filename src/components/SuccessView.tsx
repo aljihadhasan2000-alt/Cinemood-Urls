@@ -51,7 +51,7 @@ export function SuccessView({ slug, onNavigate }: SuccessViewProps) {
       setIsDeleting(true);
       setDeleteError("");
 
-      const res = await fetch(`/api/collections/${slug}`, {
+      const res = await fetch(`/api/delete/${slug}`, {
         method: "DELETE"
       });
 
