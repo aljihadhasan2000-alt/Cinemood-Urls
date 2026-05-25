@@ -2,8 +2,24 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/index.ts"
+      "source": "/api/create",
+      "destination": "/api/create.ts"
+    },
+    {
+      "source": "/api/trending",
+      "destination": "/api/trending.ts"
+    },
+    {
+      "source": "/api/collections/:slug/verify-password",
+      "destination": "/api/verify-password.ts?slug=:slug"
+    },
+    {
+      "source": "/api/collections/:slug/links/:linkId/click",
+      "destination": "/api/click.ts?slug=:slug&linkId=:linkId"
+    },
+    {
+      "source": "/api/collections/:slug",
+      "destination": "/api/collections-router.ts?slug=:slug"
     },
     {
       "source": "/p/(.*)",
@@ -18,7 +34,7 @@
       "destination": "/index.html"
     },
     {
-      "source": "/((?!assets/|favicon.ico|database.json).*)*",
+      "source": "/((?!assets/|favicon.ico|database.json|api/).*)*",
       "destination": "/index.html"
     }
   ]
