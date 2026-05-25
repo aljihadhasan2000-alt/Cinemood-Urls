@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/p/(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/success/(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/analytics/(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/((?!assets/|favicon.ico|database.json).*)*",
+      "destination": "/index.html"
+    }
+  ]
+}

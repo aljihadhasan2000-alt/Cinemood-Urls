@@ -227,8 +227,7 @@ async function deleteOneCollection(slug: string): Promise<boolean> {
 
 // --- EXPRESS API ROUTE HANDLERS ---
 
-// CREATE a collection
-app.post("/api/collections", async (req, res, next) => {
+const handleCreateCollection = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
     if (!req.body) {
       return res.status(400).json({ success: false, error: "Missing payload body." });
@@ -333,7 +332,11 @@ app.post("/api/collections", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+};
+
+// Map both collection endpoints for robust compatibility
+app.post("/api/collections", handleCreateCollection);
+app.post("/api/create", handleCreateCollection);
 
 // GET a collection by slug
 app.get("/api/collections/:slug", async (req, res, next) => {
@@ -512,11 +515,17 @@ async function start() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Cinemood URLs fullstack server running on http://0.0.0.0:${PORT}`);
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Cinemood URLs fullstack server running on http://0.0.0.0:${PORT}`);
+    });
+  }
+}
+
+if (!process.env.VERCEL) {
+  start().catch(err => {
+    console.error("Server boot error:", err);
   });
 }
 
-start().catch(err => {
-  console.error("Server boot error:", err);
-});
+export default app;
