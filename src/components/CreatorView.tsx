@@ -161,7 +161,12 @@ export function CreatorView({ onGenerated }: CreatorViewProps) {
 
       setSuccessMessage("Cinemood URLs collection generated successfully!");
       setTimeout(() => {
-        onGenerated(data.collection.id);
+        const targetSlug = data.slug || (data.collection && data.collection.id);
+        if (targetSlug) {
+          onGenerated(targetSlug);
+        } else {
+          throw new Error("Invalid API response format");
+        }
       }, 800);
 
     } catch (err: any) {

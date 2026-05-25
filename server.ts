@@ -2,7 +2,10 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
+import mongoose from "mongoose";
+import "dotenv/config";
 
+// Interface definitions
 interface LinkItem {
   id: string;
   title: string;
@@ -35,7 +38,68 @@ const DB_FILE = path.join(process.cwd(), "database.json");
 // Parse JSON payloads
 app.use(express.json());
 
-// Helper: Ensure DB file exists
+// Global API Request Logger
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
+// --- MONGOOSE / MONGODB INTEGRATION ---
+let mongooseConnected = false;
+
+// Collection Schema for Mongoose
+const collectionSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true }, // Slug
+  title: { type: String, required: true },
+  description: { type: String, default: "" },
+  theme: { type: String, default: "" },
+  links: [{
+    id: { type: String, required: true },
+    title: { type: String, required: true },
+    url: { type: String, required: true },
+    clickCount: { type: Number, default: 0 }
+  }],
+  createdAt: { type: String, required: true },
+  views: { type: Number, default: 0 },
+  isPasswordProtected: { type: Boolean, default: false },
+  password: { type: String },
+  expiryTime: { type: String, default: "none" },
+  expiresAt: { type: String, default: null },
+  isPublic: { type: Boolean, default: true },
+  enableQr: { type: Boolean, default: true },
+  enableAnalytics: { type: Boolean, default: false },
+  authorName: { type: String, default: "Cinemood Creator" }
+});
+
+const MongoCollection = (mongoose.models.CinemoodCollection || mongoose.model("CinemoodCollection", collectionSchema)) as any;
+
+// Lazy initialization database connection
+async function connectToMongo(): Promise<boolean> {
+  const uri = process.env.MONGODB_URI || process.env.MONGO_URI;
+  if (!uri) {
+    mongooseConnected = false;
+    return false;
+  }
+  
+  if (mongooseConnected && mongoose.connection.readyState >= 1) {
+    return true;
+  }
+
+  try {
+    await mongoose.connect(uri, {
+      bufferCommands: false, // Prevents hanging operations if connection is dead/unstable
+    });
+    mongooseConnected = true;
+    console.log("Connected successfully to MongoDB.");
+    return true;
+  } catch (err) {
+    console.error("MongoDB connection failed. Falling back to JSON database file:", err);
+    mongooseConnected = false;
+    return false;
+  }
+}
+
+// --- FILE SYSTEM DATABASE FALLBACK HELPERS ---
 function readDb(): Collection[] {
   try {
     if (!fs.existsSync(DB_FILE)) {
@@ -50,7 +114,6 @@ function readDb(): Collection[] {
   }
 }
 
-// Helper: Save DB file
 function writeDb(data: Collection[]): void {
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
@@ -59,7 +122,7 @@ function writeDb(data: Collection[]): void {
   }
 }
 
-// Clean up expired links periodically or on-demand
+// Filter and cleanup expired links
 function cleanExpiredCollections(collections: Collection[]): Collection[] {
   const now = new Date();
   let changed = false;
@@ -78,15 +141,99 @@ function cleanExpiredCollections(collections: Collection[]): Collection[] {
   return filtered;
 }
 
-// Global API Request Logger
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  next();
-});
+// --- DB ADAPTER OPERATIONS (UNIFY MONGO AND LOCAL JSON FILE) ---
+async function fetchAllCollections(): Promise<Collection[]> {
+  const hasMongo = await connectToMongo();
+  if (hasMongo && mongooseConnected) {
+    try {
+      const documents = await MongoCollection.find({}).lean();
+      return documents as unknown as Collection[];
+    } catch (err) {
+      console.error("Mongo fetch failed, falling back to Local JSON reads:", err);
+    }
+  }
+  return cleanExpiredCollections(readDb());
+}
+
+async function fetchOneCollection(slug: string): Promise<Collection | null> {
+  const canonicalSlug = slug.toLowerCase().trim();
+  const hasMongo = await connectToMongo();
+  if (hasMongo && mongooseConnected) {
+    try {
+      const doc = await MongoCollection.findOne({ id: canonicalSlug }).lean();
+      if (doc) {
+        const col = doc as unknown as Collection;
+        // Check dynamic expiry
+        if (col.expiresAt && new Date(col.expiresAt) < new Date()) {
+          // Dynamic deletion of expired on MongoDB
+          await MongoCollection.deleteOne({ id: canonicalSlug });
+          return null;
+        }
+        return col;
+      }
+      return null;
+    } catch (err) {
+      console.error("Mongo fetchOne failed, reading from Local JSON instead:", err);
+    }
+  }
+
+  const collections = cleanExpiredCollections(readDb());
+  const match = collections.find(c => c.id === canonicalSlug);
+  return match || null;
+}
+
+async function saveOneCollection(col: Collection): Promise<void> {
+  const hasMongo = await connectToMongo();
+  if (hasMongo && mongooseConnected) {
+    try {
+      await MongoCollection.findOneAndUpdate({ id: col.id }, col, { upsert: true, new: true });
+      return;
+    } catch (err) {
+      console.error("Mongo saveOne failed, writing to Local JSON instead:", err);
+    }
+  }
+
+  const collections = readDb();
+  const index = collections.findIndex(c => c.id === col.id);
+  if (index !== -1) {
+    collections[index] = col;
+  } else {
+    collections.push(col);
+  }
+  writeDb(collections);
+}
+
+async function deleteOneCollection(slug: string): Promise<boolean> {
+  const canonicalSlug = slug.toLowerCase().trim();
+  const hasMongo = await connectToMongo();
+  if (hasMongo && mongooseConnected) {
+    try {
+      const result = await MongoCollection.deleteOne({ id: canonicalSlug });
+      return result.deletedCount > 0;
+    } catch (err) {
+      console.error("Mongo delete failed, targeting Local JSON instead:", err);
+    }
+  }
+
+  const collections = readDb();
+  const index = collections.findIndex(c => c.id === canonicalSlug);
+  if (index !== -1) {
+    collections.splice(index, 1);
+    writeDb(collections);
+    return true;
+  }
+  return false;
+}
+
+// --- EXPRESS API ROUTE HANDLERS ---
 
 // CREATE a collection
-app.post("/api/collections", (req, res) => {
+app.post("/api/collections", async (req, res, next) => {
   try {
+    if (!req.body) {
+      return res.status(400).json({ success: false, error: "Missing payload body." });
+    }
+
     const {
       title,
       description,
@@ -101,27 +248,30 @@ app.post("/api/collections", (req, res) => {
       authorName
     } = req.body;
 
-    if (!title || !Array.isArray(links) || links.length === 0) {
-      return res.status(400).json({ error: "Title and at least one link are required." });
+    // Strict validation
+    if (!title || typeof title !== "string" || !title.trim()) {
+      return res.status(400).json({ success: false, error: "Collection Title is required." });
     }
 
-    const collections = readDb();
-    const cleanCollections = cleanExpiredCollections(collections);
+    if (!links || !Array.isArray(links) || links.length === 0) {
+      return res.status(400).json({ success: false, error: "At least one link node is required." });
+    }
 
-    // Validate custom slug
+    const collections = await fetchAllCollections();
+
+    // Validate and process custom slug
     let slug = customSlug ? customSlug.trim().toLowerCase().replace(/[^a-z0-9-_]/g, "") : "";
     if (slug) {
-      const exists = cleanCollections.find(c => c.id === slug);
+      const exists = collections.find(c => c.id === slug);
       if (exists) {
-        return res.status(400).json({ error: "Slug is already taken. Try another custom slug or leave empty for auto-generation." });
+        return res.status(400).json({ success: false, error: "Slug is already taken. Try another custom slug or leave empty." });
       }
     } else {
-      // Generate a nice random string slug
       let attempts = 0;
       do {
         slug = Math.random().toString(36).substring(2, 8);
         attempts++;
-      } while (cleanCollections.some(c => c.id === slug) && attempts < 10);
+      } while (collections.some(c => c.id === slug) && attempts < 15);
     }
 
     // Expiry calculation
@@ -135,11 +285,11 @@ app.post("/api/collections", (req, res) => {
       expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
     }
 
-    // Formulate formatted links arrays
+    // Format secure links
     const formattedLinks: LinkItem[] = links.map((lnk: any, idx: number) => ({
       id: lnk.id || `link_${idx}_${Date.now()}`,
-      title: lnk.title || "Untitled Link",
-      url: lnk.url.startsWith("http") ? lnk.url : `https://${lnk.url}`,
+      title: (lnk.title || "Visit Link").trim(),
+      url: lnk.url.startsWith("http") ? lnk.url.trim() : `https://${lnk.url.trim()}`,
       clickCount: 0
     }));
 
@@ -160,47 +310,46 @@ app.post("/api/collections", (req, res) => {
       authorName: (authorName || "").trim() || "Cinemood Creator"
     };
 
-    cleanCollections.push(newCollection);
-    writeDb(cleanCollections);
+    await saveOneCollection(newCollection);
+
+    // Compute direct dynamic shareable link URL
+    const host = req.headers.host || "cinemood-urls.vercel.app";
+    const protocol = req.headers["x-forwarded-proto"] || "https";
+    const baseUrl = process.env.APP_URL || `${protocol}://${host}`;
+    const cleanBaseUrl = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+    const generatedUrl = `${cleanBaseUrl}/p/${slug}`;
 
     return res.status(201).json({
       success: true,
-      message: "Collection created successfully",
+      slug: slug,
+      url: generatedUrl,
       collection: {
         id: newCollection.id,
         title: newCollection.title,
         expiresAt: newCollection.expiresAt
       }
     });
+
   } catch (error) {
-    console.error("Create collection failed:", error);
-    return res.status(500).json({ error: "Something went wrong on the server." });
+    next(error);
   }
 });
 
-// GET a collection by slug/id (includes view-count incrementation)
-app.get("/api/collections/:slug", (req, res) => {
+// GET a collection by slug
+app.get("/api/collections/:slug", async (req, res, next) => {
   try {
     const { slug } = req.params;
-    const collections = readDb();
-    const cleanCollections = cleanExpiredCollections(collections);
+    const col = await fetchOneCollection(slug);
 
-    const col = cleanCollections.find(c => c.id === slug.toLowerCase());
     if (!col) {
-      return res.status(404).json({ error: "Cinemood Collection not found or has expired." });
+      return res.status(404).json({ success: false, error: "Cinemood URLs collection not found or has expired." });
     }
 
-    // Check expiration dynamically just in case
-    if (col.expiresAt && new Date(col.expiresAt) < new Date()) {
-      return res.status(410).json({ error: "Collection has expired." });
-    }
-
-    // If password-protected, check if clients asked for password inside headers/query or if we should guard
     const clientPassword = req.headers["x-cinemood-password"] as string;
 
     if (col.isPasswordProtected) {
       if (!clientPassword || clientPassword !== col.password) {
-        // Return public metadata ONLY, exclude links!
+        // Obfuscated payload: return ONLY public fields
         return res.json({
           id: col.id,
           title: col.title,
@@ -216,76 +365,76 @@ app.get("/api/collections/:slug", (req, res) => {
       }
     }
 
-    // Normal access or successfully unlocked
+    // Add view count dynamically
     col.views += 1;
-    writeDb(cleanCollections);
+    await saveOneCollection(col);
 
-    // Return full details (without full server password secret)
+    // Safe extraction: strip actual raw secret passcode
     const { password, ...safeCollection } = col;
     return res.json(safeCollection);
+
   } catch (error) {
-    console.error("Fetch collection failed:", error);
-    return res.status(500).json({ error: "Something went wrong on the server." });
+    next(error);
   }
 });
 
-// VERIFY a password explicitly for unlock flow
-app.post("/api/collections/:slug/verify-password", (req, res) => {
-  const { slug } = req.params;
-  const { password } = req.body;
+// VERIFY explicit passcode
+app.post("/api/collections/:slug/verify-password", async (req, res, next) => {
+  try {
+    const { slug } = req.params;
+    const { password } = req.body;
 
-  const collections = readDb();
-  const cleanCollections = cleanExpiredCollections(collections);
+    const col = await fetchOneCollection(slug);
+    if (!col) {
+      return res.status(404).json({ success: false, error: "Collection not found" });
+    }
 
-  const col = cleanCollections.find(c => c.id === slug.toLowerCase());
-  if (!col) {
-    return res.status(404).json({ error: "Collection not found" });
-  }
+    if (col.password === password) {
+      col.views += 1;
+      await saveOneCollection(col);
 
-  if (col.password === password) {
-    col.views += 1;
-    writeDb(cleanCollections);
-    const { password: _, ...safeCol } = col;
-    return res.json({ success: true, collection: safeCol });
-  } else {
-    return res.status(401).json({ error: "Incorrect password. Access denied." });
+      const { password: _, ...safeCol } = col;
+      return res.json({ success: true, collection: safeCol });
+    } else {
+      return res.status(401).json({ success: false, error: "Incorrect password. Access denied." });
+    }
+
+  } catch (error) {
+    next(error);
   }
 });
 
-// TRACK link clicks
-app.post("/api/collections/:slug/links/:linkId/click", (req, res) => {
+// INCREASE link click counts
+app.post("/api/collections/:slug/links/:linkId/click", async (req, res, next) => {
   try {
     const { slug, linkId } = req.params;
-    const collections = readDb();
-    const cleanCollections = cleanExpiredCollections(collections);
+    const col = await fetchOneCollection(slug);
 
-    const col = cleanCollections.find(c => c.id === slug.toLowerCase());
     if (!col) {
-      return res.status(404).json({ error: "Collection not found" });
+      return res.status(404).json({ success: false, error: "Collection not found" });
     }
 
     const item = col.links.find(l => l.id === linkId);
     if (item) {
       item.clickCount = (item.clickCount || 0) + 1;
-      writeDb(cleanCollections);
+      await saveOneCollection(col);
       return res.json({ success: true, clickCount: item.clickCount });
     }
 
-    return res.status(404).json({ error: "Link not found inside collection" });
+    return res.status(404).json({ success: false, error: "Link identifier not found." });
+
   } catch (error) {
-    console.error("Increment link click failed:", error);
-    return res.status(500).json({ error: "Failed to increment clicks" });
+    next(error);
   }
 });
 
-// GET TRENDING / POPULAR COllections
-app.get("/api/trending", (req, res) => {
+// GET trending/popular collections lists
+app.get("/api/trending", async (req, res, next) => {
   try {
-    const collections = readDb();
-    const cleanCollections = cleanExpiredCollections(collections);
+    const collections = await fetchAllCollections();
 
     // Find non-password, public, sorted by views descending, take top 6
-    const trending = cleanCollections
+    const trending = collections
       .filter(c => c.isPublic && !c.isPasswordProtected)
       .sort((a, b) => b.views - a.views)
       .slice(0, 6)
@@ -299,32 +448,50 @@ app.get("/api/trending", (req, res) => {
         authorName: c.authorName
       }));
 
-    res.json(trending);
+    return res.json(trending);
+
   } catch (error) {
-    console.error("Trending fetch error:", error);
-    res.json([]);
+    next(error);
   }
 });
 
-// DELETE collection by slug
-app.delete("/api/collections/:slug", (req, res) => {
+// DELETE collection
+app.delete("/api/collections/:slug", async (req, res, next) => {
   try {
     const { slug } = req.params;
-    const collections = readDb();
-    const cleanCollections = cleanExpiredCollections(collections);
+    const deleted = await deleteOneCollection(slug);
 
-    const index = cleanCollections.findIndex(c => c.id === slug.toLowerCase());
-    if (index === -1) {
-      return res.status(404).json({ error: "Collection not found" });
+    if (deleted) {
+      return res.json({ success: true, message: "Cinemood Collection deleted successfully." });
+    } else {
+      return res.status(404).json({ success: false, error: "Collection not found" });
     }
 
-    cleanCollections.splice(index, 1);
-    writeDb(cleanCollections);
-    return res.json({ success: true, message: "Cinemood Collection deleted successfully." });
   } catch (error) {
-    console.error("Delete collection failed:", error);
-    return res.status(500).json({ error: "Could not delete collection on server." });
+    next(error);
   }
+});
+
+// --- ROUTING ERROR FALLBACK PROTECTION ---
+
+// Unmatched API requests: respond with clear JSON and NOT index.html fallback
+app.all("/api/*", (req, res) => {
+  return res.status(404).json({
+    success: false,
+    error: `API endpoint '${req.method} ${req.url}' does not exist.`
+  });
+});
+
+// Global API Errors Middleware catcher: enforces JSON
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (req.url.startsWith("/api/")) {
+    console.error("Unhandled API Server Error:", err);
+    return res.status(err.status || 500).json({
+      success: false,
+      error: err.message || "An unhandled server error occurred."
+    });
+  }
+  next(err);
 });
 
 // Serves client assets statically or via Vite
