@@ -54,7 +54,13 @@ export function PublicView({ slug }: PublicViewProps) {
         headers
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error(`Invalid response format from server: "${text.substring(0, 40)}"`);
+      }
 
       if (!res.ok) {
         if (res.status === 410) {
@@ -84,7 +90,14 @@ export function PublicView({ slug }: PublicViewProps) {
         body: JSON.stringify({ password: passwordInput })
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error(`Invalid response format from server: "${text.substring(0, 40)}"`);
+      }
+
       if (!res.ok) {
         throw new Error(data.error || "Incorrect password.");
       }

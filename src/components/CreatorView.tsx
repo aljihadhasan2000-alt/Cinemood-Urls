@@ -61,8 +61,13 @@ export function CreatorView({ onGenerated }: CreatorViewProps) {
     try {
       setIsTrendingLoading(true);
       const res = await fetch("/api/trending");
-      const data = await res.json();
-      setTrending(data);
+      const text = await res.text();
+      try {
+        const data = JSON.parse(text);
+        setTrending(Array.isArray(data) ? data : []);
+      } catch {
+        setTrending([]);
+      }
     } catch (e) {
       console.error("Could not fetch trending lists:", e);
     } finally {
@@ -154,7 +159,14 @@ export function CreatorView({ onGenerated }: CreatorViewProps) {
         body: JSON.stringify(payload)
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch (parseError) {
+        throw new Error(`The backend API did not return valid JSON. Response starts with: "${text.substring(0, 40)}"`);
+      }
+
       if (!res.ok) {
         throw new Error(data.error || "Failed to generate collection.");
       }

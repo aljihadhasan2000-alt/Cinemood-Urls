@@ -62,7 +62,7 @@ export default defineConfig(() => {
                 const verifyPasswordMatch = pathname.match(/^\/api\/collections\/([^/]+)\/verify-password$/);
                 if (verifyPasswordMatch) {
                   req.query.slug = verifyPasswordMatch[1];
-                  const { default: handler } = await server.ssrLoadModule('/api/verify-password.ts');
+                  const { default: handler } = await server.ssrLoadModule('/api/collections/[slug]/verify-password.ts');
                   return handler(req, res);
                 }
 
@@ -70,14 +70,14 @@ export default defineConfig(() => {
                 if (clickMatch) {
                   req.query.slug = clickMatch[1];
                   req.query.linkId = clickMatch[2];
-                  const { default: handler } = await server.ssrLoadModule('/api/click.ts');
+                  const { default: handler } = await server.ssrLoadModule('/api/collections/[slug]/links/[linkId]/click.ts');
                   return handler(req, res);
                 }
 
                 const collectionsMatch = pathname.match(/^\/api\/collections\/([^/]+)$/);
                 if (collectionsMatch) {
                   req.query.slug = collectionsMatch[1];
-                  const { default: handler } = await server.ssrLoadModule('/api/collections-router.ts');
+                  const { default: handler } = await server.ssrLoadModule('/api/collections/[slug].ts');
                   return handler(req, res);
                 }
 
@@ -101,7 +101,7 @@ export default defineConfig(() => {
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâ€”file watching is disabled to prevent flickering during agent edits.
+      // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},

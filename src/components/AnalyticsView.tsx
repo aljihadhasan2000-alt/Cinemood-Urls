@@ -51,7 +51,13 @@ export function AnalyticsView({ slug, onNavigate }: AnalyticsViewProps) {
         headers
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error(`The backend did not return valid JSON. Response starts with: "${text.substring(0, 40)}"`);
+      }
 
       if (!res.ok) {
         throw new Error(data.error || "Collection not found.");
@@ -78,7 +84,14 @@ export function AnalyticsView({ slug, onNavigate }: AnalyticsViewProps) {
         body: JSON.stringify({ password: passwordInput })
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error(`The backend did not return valid JSON. Response starts with: "${text.substring(0, 40)}"`);
+      }
+
       if (!res.ok) {
         throw new Error(data.error || "Incorrect password.");
       }

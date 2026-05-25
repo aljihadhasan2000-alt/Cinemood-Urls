@@ -56,7 +56,13 @@ export function SuccessView({ slug, onNavigate }: SuccessViewProps) {
       });
 
       if (!res.ok) {
-        const d = await res.json();
+        const text = await res.text();
+        let d: any = {};
+        try {
+          d = JSON.parse(text);
+        } catch {
+          // ignore parsing error if it's plaintext
+        }
         throw new Error(d.error || "Could not delete collection from server.");
       }
 
