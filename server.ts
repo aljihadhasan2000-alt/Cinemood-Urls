@@ -39,6 +39,14 @@ const DB_FILE = process.env.VERCEL
 // Parse JSON payloads
 app.use(express.json());
 
+// JSON Error Handler Guard for malformed payloads
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err instanceof SyntaxError && "status" in err && err.status === 400 && "body" in err) {
+    return res.status(400).json({ success: false, error: "Invalid JSON payload format." });
+  }
+  next();
+});
+
 // Global API Request Logger
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
@@ -47,6 +55,16 @@ app.use((req, res, next) => {
 
 // --- MONGOOSE / MONGODB INTEGRATION ---
 let mongooseConnected = false;
+
+interface MongooseCache {
+  conn: any;
+  promise: any;
+}
+
+let cached: MongooseCache = (global as any).mongooseCache;
+if (!cached) {
+  cached = (global as any).mongooseCache = { conn: null, promise: null };
+}
 
 // Collection Schema for Mongoose
 const collectionSchema = new mongoose.Schema({
@@ -82,14 +100,27 @@ async function connectToMongo(): Promise<boolean> {
     return false;
   }
   
-  if (mongooseConnected && mongoose.connection.readyState >= 1) {
+  if (cached.conn && mongoose.connection.readyState >= 1) {
+    mongooseConnected = true;
     return true;
   }
 
-  try {
-    await mongoose.connect(uri, {
+  if (!cached.promise) {
+    console.log("Initiating MongoDB connection with strict serverless timeouts...");
+    cached.promise = mongoose.connect(uri, {
       bufferCommands: false, // Prevents hanging operations if connection is dead/unstable
+      serverSelectionTimeoutMS: 3000, // Timeout server selection after 3 seconds
+      connectTimeoutMS: 3000, // Timeout initial handshake after 3 seconds
+    }).then((m) => {
+      return m;
+    }).catch((err) => {
+      cached.promise = null; // Reset promise on failure
+      throw err;
     });
+  }
+
+  try {
+    cached.conn = await cached.promise;
     mongooseConnected = true;
     console.log("Connected successfully to MongoDB.");
     return true;
