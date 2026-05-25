@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { getCanonicalUrl } from "../utils";
 import {
   Check,
   Copy,
@@ -32,7 +33,7 @@ export function SuccessView({ slug, onNavigate }: SuccessViewProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
-  const publicUrl = `${window.location.origin}/p/${slug}`;
+  const publicUrl = getCanonicalUrl(slug);
   const analyticsUrl = `/analytics/${slug}`;
 
   const handleCopy = async () => {

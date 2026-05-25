@@ -313,9 +313,17 @@ const handleCreateCollection = async (req: express.Request, res: express.Respons
     await saveOneCollection(newCollection);
 
     // Compute direct dynamic shareable link URL
-    const host = req.headers.host || "cinemood-urls.vercel.app";
-    const protocol = req.headers["x-forwarded-proto"] || "https";
-    const baseUrl = process.env.APP_URL || `${protocol}://${host}`;
+    let baseUrl = process.env.APP_URL;
+    if (!baseUrl) {
+      const host = req.headers.host || "";
+      const isProduction = process.env.NODE_ENV === "production" || process.env.VERCEL || (!host.includes("localhost") && !host.includes("3000") && !host.includes("ais-dev") && !host.includes("run.app"));
+      if (isProduction) {
+        baseUrl = "https://cinemoodurls.site";
+      } else {
+        const protocol = req.headers["x-forwarded-proto"] || "https";
+        baseUrl = `${protocol}://${host || "localhost:3000"}`;
+      }
+    }
     const cleanBaseUrl = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
     const generatedUrl = `${cleanBaseUrl}/p/${slug}`;
 

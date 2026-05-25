@@ -1,5 +1,6 @@
 import { useState, useEffect, FormEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { getCanonicalUrl } from "../utils";
 import {
   Lock,
   Unlock,
@@ -108,7 +109,8 @@ export function PublicView({ slug }: PublicViewProps) {
 
   const handleCopyPageLink = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.href);
+      const canonicalUrl = getCanonicalUrl(slug);
+      await navigator.clipboard.writeText(canonicalUrl);
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
     } catch (e) {
