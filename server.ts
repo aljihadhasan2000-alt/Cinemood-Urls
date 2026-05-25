@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { createServer as createViteServer } from "vite";
 import mongoose from "mongoose";
 import "dotenv/config";
 
@@ -33,7 +32,9 @@ interface Collection {
 
 const app = express();
 const PORT = 3000;
-const DB_FILE = path.join(process.cwd(), "database.json");
+const DB_FILE = process.env.VERCEL
+  ? path.join("/tmp", "database.json")
+  : path.join(process.cwd(), "database.json");
 
 // Parse JSON payloads
 app.use(express.json());
@@ -334,12 +335,14 @@ const handleCreateCollection = async (req: express.Request, res: express.Respons
   }
 };
 
+const apiRouter = express.Router();
+
 // Map both collection endpoints for robust compatibility
-app.post("/api/collections", handleCreateCollection);
-app.post("/api/create", handleCreateCollection);
+apiRouter.post("/collections", handleCreateCollection);
+apiRouter.post("/create", handleCreateCollection);
 
 // GET a collection by slug
-app.get("/api/collections/:slug", async (req, res, next) => {
+apiRouter.get("/collections/:slug", async (req, res, next) => {
   try {
     const { slug } = req.params;
     const col = await fetchOneCollection(slug);
@@ -382,7 +385,7 @@ app.get("/api/collections/:slug", async (req, res, next) => {
 });
 
 // VERIFY explicit passcode
-app.post("/api/collections/:slug/verify-password", async (req, res, next) => {
+apiRouter.post("/collections/:slug/verify-password", async (req, res, next) => {
   try {
     const { slug } = req.params;
     const { password } = req.body;
@@ -408,7 +411,7 @@ app.post("/api/collections/:slug/verify-password", async (req, res, next) => {
 });
 
 // INCREASE link click counts
-app.post("/api/collections/:slug/links/:linkId/click", async (req, res, next) => {
+apiRouter.post("/collections/:slug/links/:linkId/click", async (req, res, next) => {
   try {
     const { slug, linkId } = req.params;
     const col = await fetchOneCollection(slug);
@@ -432,7 +435,7 @@ app.post("/api/collections/:slug/links/:linkId/click", async (req, res, next) =>
 });
 
 // GET trending/popular collections lists
-app.get("/api/trending", async (req, res, next) => {
+apiRouter.get("/trending", async (req, res, next) => {
   try {
     const collections = await fetchAllCollections();
 
@@ -459,7 +462,7 @@ app.get("/api/trending", async (req, res, next) => {
 });
 
 // DELETE collection
-app.delete("/api/collections/:slug", async (req, res, next) => {
+apiRouter.delete("/collections/:slug", async (req, res, next) => {
   try {
     const { slug } = req.params;
     const deleted = await deleteOneCollection(slug);
@@ -475,6 +478,10 @@ app.delete("/api/collections/:slug", async (req, res, next) => {
   }
 });
 
+// Mount router under both configurations for complete and dynamic Vercel routing immunity
+app.use("/api", apiRouter);
+app.use("/", apiRouter);
+
 // --- ROUTING ERROR FALLBACK PROTECTION ---
 
 // Unmatched API requests: respond with clear JSON and NOT index.html fallback
@@ -487,7 +494,7 @@ app.all("/api/*", (req, res) => {
 
 // Global API Errors Middleware catcher: enforces JSON
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (req.url.startsWith("/api/")) {
+  if (req.url.startsWith("/api/") || req.url.includes("/collections") || req.url.includes("/trending") || req.url.includes("/create")) {
     console.error("Unhandled API Server Error:", err);
     return res.status(err.status || 500).json({
       success: false,
@@ -501,6 +508,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 async function start() {
   if (process.env.NODE_ENV !== "production") {
     // Inject Vite middleware
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",

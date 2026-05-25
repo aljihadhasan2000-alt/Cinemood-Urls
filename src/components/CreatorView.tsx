@@ -148,7 +148,7 @@ export function CreatorView({ onGenerated }: CreatorViewProps) {
         enableAnalytics: false // Removed complex stats pages
       };
 
-      const res = await fetch("/api/collections", {
+      const res = await fetch("/api/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
