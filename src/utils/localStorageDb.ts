@@ -1,7 +1,5 @@
 import { Collection } from "../types";
 
-const KEY = "cinemood_collections";
-
 // Helper to convert title to slug as requested
 export function convertTitleToSlug(title: string): string {
   return title
@@ -53,78 +51,95 @@ const DEFAULT_SEEDED_COLLECTIONS: Record<string, Collection> = {
   }
 };
 
-// Internal load helper
-function loadAllRaw(): Record<string, Collection> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) {
-      // Seed with initial high-engagement classics
-      window.localStorage.setItem(KEY, JSON.stringify(DEFAULT_SEEDED_COLLECTIONS));
-      return DEFAULT_SEEDED_COLLECTIONS;
-    }
-    return JSON.parse(raw);
-  } catch (e) {
-    console.error("Failed to read from localStorage:", e);
-    return DEFAULT_SEEDED_COLLECTIONS;
-  }
-}
-
-// Internal save helper
-function saveAllRaw(data: Record<string, Collection>) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify(data));
-  } catch (e) {
-    console.error("Failed to write to localStorage:", e);
-  }
-}
-
-// Public interface
+// Public interface using "cinemood-${slug}" as key
 export const localStorageDb = {
   getAll(): Collection[] {
-    const dict = loadAllRaw();
-    return Object.values(dict);
+    if (typeof window === "undefined") return [];
+    
+    const list: Collection[] = [];
+    let hasSeeded = false;
+    
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith("cinemood-")) {
+        hasSeeded = true;
+        try {
+          const item = JSON.parse(window.localStorage.getItem(key) || "");
+          if (item) {
+            list.push(item);
+          }
+        } catch (e) {
+          // ignore parsing error
+        }
+      }
+    }
+    
+    if (!hasSeeded) {
+      // Seed with default options
+      Object.keys(DEFAULT_SEEDED_COLLECTIONS).forEach(slug => {
+        const col = DEFAULT_SEEDED_COLLECTIONS[slug];
+        window.localStorage.setItem(`cinemood-${slug}`, JSON.stringify(col));
+        list.push(col);
+      });
+    }
+    
+    return list;
   },
 
   get(slug: string): Collection | null {
+    if (typeof window === "undefined") return null;
     const canonicalSlug = slug.toLowerCase().trim();
-    const dict = loadAllRaw();
-    return dict[canonicalSlug] || null;
+    try {
+      const stored = window.localStorage.getItem(`cinemood-${canonicalSlug}`);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (e) {
+      console.error("Failed to read from localStorage:", e);
+    }
+    
+    // Seed in case of individual hit if not yet populated
+    if (DEFAULT_SEEDED_COLLECTIONS[canonicalSlug]) {
+      const col = DEFAULT_SEEDED_COLLECTIONS[canonicalSlug];
+      window.localStorage.setItem(`cinemood-${canonicalSlug}`, JSON.stringify(col));
+      return col;
+    }
+    
+    return null;
   },
 
   save(col: Collection): void {
+    if (typeof window === "undefined") return;
     const canonicalSlug = col.id.toLowerCase().trim();
     col.id = canonicalSlug;
-    const dict = loadAllRaw();
-    dict[canonicalSlug] = col;
-    saveAllRaw(dict);
+    window.localStorage.setItem(`cinemood-${canonicalSlug}`, JSON.stringify(col));
   },
 
   delete(slug: string): boolean {
+    if (typeof window === "undefined") return false;
     const canonicalSlug = slug.toLowerCase().trim();
-    const dict = loadAllRaw();
-    if (dict[canonicalSlug]) {
-      delete dict[canonicalSlug];
-      saveAllRaw(dict);
+    const key = `cinemood-${canonicalSlug}`;
+    if (window.localStorage.getItem(key)) {
+      window.localStorage.removeItem(key);
       return true;
     }
     return false;
   },
 
   incrementViews(slug: string): void {
+    if (typeof window === "undefined") return;
     const canonicalSlug = slug.toLowerCase().trim();
-    const dict = loadAllRaw();
-    if (dict[canonicalSlug]) {
-      dict[canonicalSlug].views = (dict[canonicalSlug].views || 0) + 1;
-      saveAllRaw(dict);
+    const col = this.get(canonicalSlug);
+    if (col) {
+      col.views = (col.views || 0) + 1;
+      this.save(col);
     }
   },
 
   incrementClickCount(slug: string, linkId: string): void {
+    if (typeof window === "undefined") return;
     const canonicalSlug = slug.toLowerCase().trim();
-    const dict = loadAllRaw();
-    const col = dict[canonicalSlug];
+    const col = this.get(canonicalSlug);
     if (col && col.links) {
       col.links = col.links.map(lnk => {
         if (lnk.id === linkId) {
@@ -132,7 +147,7 @@ export const localStorageDb = {
         }
         return lnk;
       });
-      saveAllRaw(dict);
+      this.save(col);
     }
   }
 };
