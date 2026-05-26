@@ -1,6 +1,7 @@
 import { useState, useEffect, FormEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { getCanonicalUrl } from "../utils";
+import { localStorageDb } from "../utils/localStorageDb";
 import {
   Lock,
   Unlock,
@@ -38,38 +39,26 @@ export function PublicView({ slug }: PublicViewProps) {
     fetchCollection();
   }, [slug]);
 
-  const fetchCollection = async (passwordCode?: string) => {
+  const fetchCollection = () => {
     try {
       setLoading(true);
       setError("");
 
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json"
-      };
-      if (passwordCode) {
-        headers["x-cinemood-password"] = passwordCode;
+      const col = localStorageDb.get(slug);
+      if (!col) {
+        throw new Error("Collection not found.");
       }
 
-      const res = await fetch(`/api/get/${slug}`, {
-        headers
-      });
+      // Increment view metrics locally
+      localStorageDb.incrementViews(slug);
 
-      const text = await res.text();
-      let data: any = {};
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        throw new Error(`Invalid response format from server: "${text.substring(0, 40)}"`);
+      if (col.isPasswordProtected) {
+        // Exclude links list from state until correct passcode is verified
+        const { links, ...partialCol } = col;
+        setCollection(partialCol as any);
+      } else {
+        setCollection(col);
       }
-
-      if (!res.ok) {
-        if (res.status === 410) {
-          throw new Error("This collection has expired.");
-        }
-        throw new Error(data.error || "Collection not found.");
-      }
-
-      setCollection(data);
     } catch (e: any) {
       setError(e.message || "Failed to load Cinemood Collection.");
     } finally {
@@ -77,44 +66,31 @@ export function PublicView({ slug }: PublicViewProps) {
     }
   };
 
-  const handlePasswordSubmit = async (e: FormEvent) => {
+  const handlePasswordSubmit = (e: FormEvent) => {
     e.preventDefault();
     setPasswordError("");
 
     try {
-      const res = await fetch(`/api/collections/${slug}/verify-password`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ password: passwordInput })
-      });
-
-      const text = await res.text();
-      let data: any = {};
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        throw new Error(`Invalid response format from server: "${text.substring(0, 40)}"`);
+      const col = localStorageDb.get(slug);
+      if (!col) {
+        throw new Error("Collection not found.");
       }
 
-      if (!res.ok) {
-        throw new Error(data.error || "Incorrect password.");
+      if (col.password === passwordInput) {
+        // Successfully unlocked, store full collection
+        setCollection(col);
+      } else {
+        throw new Error("Incorrect password.");
       }
-
-      // Successfully unlocked, store full collection
-      setCollection(data.collection);
     } catch (err: any) {
       setPasswordError(err.message || "Access Denied.");
     }
   };
 
-  const handleLinkClick = async (linkId: string) => {
+  const handleLinkClick = (linkId: string) => {
     try {
-      // Incrememnt click count on the server
-      fetch(`/api/collections/${slug}/links/${linkId}/click`, {
-        method: "POST"
-      });
+      // Increment click count locally
+      localStorageDb.incrementClickCount(slug, linkId);
     } catch (e) {
       console.error("Failed to track click:", e);
     }

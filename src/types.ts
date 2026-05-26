@@ -19,6 +19,7 @@ export interface Collection {
   enableQr: boolean;
   enableAnalytics: boolean;
   authorName?: string;
+  password?: string;
 }
 
 export interface TrendingPage {

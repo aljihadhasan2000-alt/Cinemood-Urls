@@ -27,16 +27,9 @@ export default function App() {
 
   // Route match parsers
   let content;
-  if (path.startsWith("/p/")) {
-    const slug = path.substring(3).trim();
-    content = <PublicView slug={slug} />;
-  } else if (path.startsWith("/success/")) {
-    const slug = path.substring(9).trim();
-    content = <SuccessView slug={slug} onNavigate={navigate} />;
-  } else if (path.startsWith("/analytics/")) {
-    const slug = path.substring(11).trim();
-    content = <AnalyticsView slug={slug} onNavigate={navigate} />;
-  } else {
+  const cleanPath = path.trim();
+
+  if (cleanPath === "/" || cleanPath === "") {
     // Default to homepage url generator
     content = (
       <CreatorView
@@ -45,10 +38,26 @@ export default function App() {
         }}
       />
     );
+  } else if (cleanPath.startsWith("/success/")) {
+    const slug = cleanPath.substring(9).trim();
+    content = <SuccessView slug={slug} onNavigate={navigate} />;
+  } else if (cleanPath.startsWith("/analytics/")) {
+    const slug = cleanPath.substring(11).trim();
+    content = <AnalyticsView slug={slug} onNavigate={navigate} />;
+  } else {
+    // It is a direct public collections slug path, e.g. /[slug] or /p/[slug]
+    let slug = cleanPath;
+    if (slug.startsWith("/")) {
+      slug = slug.substring(1);
+    }
+    if (slug.startsWith("p/")) {
+      slug = slug.substring(2);
+    }
+    content = <PublicView slug={slug} />;
   }
 
   // Determine if we should show the full header navigation (not needed in beautiful public landers)
-  const showNavbar = !path.startsWith("/p/");
+  const showNavbar = cleanPath === "/" || cleanPath === "" || cleanPath.startsWith("/success/") || cleanPath.startsWith("/analytics/");
 
   return (
     <div className="relative min-h-screen bg-transparent select-none selection:bg-purple-glow/30 selection:text-white font-sans text-white overflow-hidden pb-16">

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { getCanonicalUrl } from "../utils";
+import { localStorageDb } from "../utils/localStorageDb";
 import {
   Check,
   Copy,
@@ -51,19 +52,9 @@ export function SuccessView({ slug, onNavigate }: SuccessViewProps) {
       setIsDeleting(true);
       setDeleteError("");
 
-      const res = await fetch(`/api/delete/${slug}`, {
-        method: "DELETE"
-      });
-
-      if (!res.ok) {
-        const text = await res.text();
-        let d: any = {};
-        try {
-          d = JSON.parse(text);
-        } catch {
-          // ignore parsing error if it's plaintext
-        }
-        throw new Error(d.error || "Could not delete collection from server.");
+      const success = localStorageDb.delete(slug);
+      if (!success) {
+        throw new Error("Could not find or delete collection in local storage.");
       }
 
       // Return back home on successful delete
@@ -147,7 +138,7 @@ export function SuccessView({ slug, onNavigate }: SuccessViewProps) {
 
               <button
                 onClick={() => {
-                  window.history.pushState(null, "", `/p/${slug}`);
+                  window.history.pushState(null, "", `/${slug}`);
                   window.dispatchEvent(new Event("popstate"));
                 }}
                 className="p-3.5 bg-purple-glow/20 hover:bg-purple-glow/30 active:scale-95 border border-purple-glow/30 rounded-xl text-purple-glow transition-all cursor-pointer"

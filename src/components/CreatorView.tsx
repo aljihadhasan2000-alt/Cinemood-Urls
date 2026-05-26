@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { detectPlatform } from "./LinkDetector";
 import { TrendingPage } from "../types";
+import { localStorageDb, convertTitleToSlug } from "../utils/localStorageDb";
 
 interface LinkInput {
   id: string;
@@ -57,17 +58,22 @@ export function CreatorView({ onGenerated }: CreatorViewProps) {
     fetchTrending();
   }, []);
 
-  const fetchTrending = async () => {
+  const fetchTrending = () => {
     try {
       setIsTrendingLoading(true);
-      const res = await fetch("/api/trending");
-      const text = await res.text();
-      try {
-        const data = JSON.parse(text);
-        setTrending(Array.isArray(data) ? data : []);
-      } catch {
-        setTrending([]);
-      }
+      const allCols = localStorageDb.getAll();
+      const mapped: TrendingPage[] = allCols.map(col => ({
+        id: col.id,
+        title: col.title,
+        description: col.description || "",
+        views: col.views || 0,
+        linksCount: col.links ? col.links.length : 0,
+        createdAt: col.createdAt,
+        authorName: col.authorName || "Cinemood Creator"
+      }));
+      // Sort in-situ popular lists based on view impressions
+      mapped.sort((a, b) => b.views - a.views);
+      setTrending(mapped);
     } catch (e) {
       console.error("Could not fetch trending lists:", e);
     } finally {
@@ -139,46 +145,36 @@ export function CreatorView({ onGenerated }: CreatorViewProps) {
     try {
       setIsGenerating(true);
 
-      const payload = {
+      const slugBase = customSlug.trim() || title.trim();
+      const computedSlug = convertTitleToSlug(slugBase);
+
+      if (!computedSlug) {
+        throw new Error("Invalid title name. Please enter a alphanumeric title.");
+      }
+
+      const newCollection = {
+        id: computedSlug,
         title: title.trim(),
         description: "", // Removed bio
         authorName: "Cinemood Creator", // Streamlined metadata
         links: linksWithTitles,
         isPasswordProtected,
         password: isPasswordProtected ? password : "",
-        customSlug: customSlug.trim() || undefined,
-        expiryTime: "none", // Removed toggle
+        createdAt: new Date().toISOString(),
+        views: 0,
+        expiryTime: "none" as const,
+        expiresAt: null,
         isPublic: true, // Default public for trending listing
         enableQr,
         enableAnalytics: false // Removed complex stats pages
       };
 
-      const res = await fetch("/api/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      const text = await res.text();
-      let data: any = {};
-      try {
-        data = JSON.parse(text);
-      } catch (parseError) {
-        throw new Error(`The backend API did not return valid JSON. Response starts with: "${text.substring(0, 40)}"`);
-      }
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to generate collection.");
-      }
+      // Store entirely on clientside sandbox!
+      localStorageDb.save(newCollection);
 
       setSuccessMessage("Cinemood URLs collection generated successfully!");
       setTimeout(() => {
-        const targetSlug = data.slug || (data.collection && data.collection.id);
-        if (targetSlug) {
-          onGenerated(targetSlug);
-        } else {
-          throw new Error("Invalid API response format");
-        }
+        onGenerated(computedSlug);
       }, 800);
 
     } catch (err: any) {
@@ -390,7 +386,7 @@ export function CreatorView({ onGenerated }: CreatorViewProps) {
                 <div className="flex flex-col p-3 bg-white/5 rounded-xl border border-white/5">
                   <span className="text-[10px] uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">Custom Slug</span>
                   <div className="relative flex items-center">
-                    <span className="text-[10px] font-mono text-zinc-600 mr-1.5">/p/</span>
+                    <span className="text-[10px] font-mono text-zinc-600 mr-1.5">/</span>
                     <input
                       type="text"
                       placeholder="custom-path"
@@ -534,10 +530,10 @@ export function CreatorView({ onGenerated }: CreatorViewProps) {
                   </div>
 
                   <a
-                    href={`/p/${col.id}`}
+                    href={`/${col.id}`}
                     onClick={(e) => {
                       e.preventDefault();
-                      window.history.pushState(null, "", `/p/${col.id}`);
+                      window.history.pushState(null, "", `/${col.id}`);
                       window.dispatchEvent(new Event("popstate"));
                       window.scrollTo({ top: 0, behavior: "smooth" });
                     }}

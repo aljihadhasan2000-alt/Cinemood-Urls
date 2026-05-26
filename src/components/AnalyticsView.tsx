@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { detectPlatform } from "./LinkDetector";
 import { Collection } from "../types";
+import { localStorageDb } from "../utils/localStorageDb";
 
 interface AnalyticsViewProps {
   slug: string;
@@ -35,35 +36,22 @@ export function AnalyticsView({ slug, onNavigate }: AnalyticsViewProps) {
     fetchAnalytics();
   }, [slug]);
 
-  const fetchAnalytics = async (passwordCode?: string) => {
+  const fetchAnalytics = () => {
     try {
       setLoading(true);
       setError("");
 
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json"
-      };
-      if (passwordCode) {
-        headers["x-cinemood-password"] = passwordCode;
+      const col = localStorageDb.get(slug);
+      if (!col) {
+        throw new Error("Collection not found.");
       }
 
-      const res = await fetch(`/api/get/${slug}`, {
-        headers
-      });
-
-      const text = await res.text();
-      let data: any = {};
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        throw new Error(`The backend did not return valid JSON. Response starts with: "${text.substring(0, 40)}"`);
+      if (col.isPasswordProtected) {
+        const { links, ...partialCol } = col;
+        setCollection(partialCol as any);
+      } else {
+        setCollection(col);
       }
-
-      if (!res.ok) {
-        throw new Error(data.error || "Collection not found.");
-      }
-
-      setCollection(data);
     } catch (e: any) {
       setError(e.message || "Failed to load Analytics dashboard.");
     } finally {
@@ -71,33 +59,22 @@ export function AnalyticsView({ slug, onNavigate }: AnalyticsViewProps) {
     }
   };
 
-  const handlePasswordSubmit = async (e: FormEvent) => {
+  const handlePasswordSubmit = (e: FormEvent) => {
     e.preventDefault();
     setPasswordError("");
 
     try {
-      const res = await fetch(`/api/collections/${slug}/verify-password`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ password: passwordInput })
-      });
-
-      const text = await res.text();
-      let data: any = {};
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        throw new Error(`The backend did not return valid JSON. Response starts with: "${text.substring(0, 40)}"`);
+      const col = localStorageDb.get(slug);
+      if (!col) {
+        throw new Error("Collection not found.");
       }
 
-      if (!res.ok) {
-        throw new Error(data.error || "Incorrect password.");
+      if (col.password === passwordInput) {
+        // Successfully unlocked, store full collection
+        setCollection(col);
+      } else {
+        throw new Error("Incorrect password.");
       }
-
-      // Successfully unlocked, store full collection
-      setCollection(data.collection);
     } catch (err: any) {
       setPasswordError(err.message || "Access Denied.");
     }
@@ -219,7 +196,7 @@ export function AnalyticsView({ slug, onNavigate }: AnalyticsViewProps) {
             {collection.title} <span className="text-blue-accent">STATS</span>
           </h1>
           <p className="text-xs text-zinc-400 font-sans mt-1">
-            Author: <b>{collection.authorName || "Owner"}</b> &bull; Live Shortslug: <span className="font-mono text-zinc-300">/p/{collection.id}</span>
+            Author: <b>{collection.authorName || "Owner"}</b> &bull; Live Shortslug: <span className="font-mono text-zinc-300">/{collection.id}</span>
           </p>
         </div>
 
