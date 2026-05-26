@@ -3,23 +3,23 @@
   "rewrites": [
     {
       "source": "/api/get/:slug",
-      "destination": "/api/get/[slug].ts?slug=:slug"
+      "destination": "/api/get.ts?slug=:slug"
     },
     {
       "source": "/api/delete/:slug",
-      "destination": "/api/delete/[slug].ts?slug=:slug"
+      "destination": "/api/delete.ts?slug=:slug"
     },
     {
       "source": "/api/collections/:slug/verify-password",
-      "destination": "/api/collections/[slug]/verify-password.ts?slug=:slug"
+      "destination": "/api/verify-password.ts?slug=:slug"
     },
     {
       "source": "/api/collections/:slug/links/:linkId/click",
-      "destination": "/api/collections/[slug]/links/[linkId]/click.ts?slug=:slug&linkId=:linkId"
+      "destination": "/api/click.ts?slug=:slug&linkId=:linkId"
     },
     {
       "source": "/api/collections/:slug",
-      "destination": "/api/collections/[slug].ts?slug=:slug"
+      "destination": "/api/get.ts?slug=:slug"
     },
     {
       "source": "/p/(.*)",

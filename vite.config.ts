@@ -62,21 +62,21 @@ export default defineConfig(() => {
                 const getMatch = pathname.match(/^\/api\/get\/([^/]+)$/);
                 if (getMatch) {
                   req.query.slug = getMatch[1];
-                  const { default: handler } = await server.ssrLoadModule('/api/get/[slug].ts');
+                  const { default: handler } = await server.ssrLoadModule('/api/get.ts');
                   return handler(req, res);
                 }
 
                 const deleteMatch = pathname.match(/^\/api\/delete\/([^/]+)$/);
                 if (deleteMatch) {
                   req.query.slug = deleteMatch[1];
-                  const { default: handler } = await server.ssrLoadModule('/api/delete/[slug].ts');
+                  const { default: handler } = await server.ssrLoadModule('/api/delete.ts');
                   return handler(req, res);
                 }
 
                 const verifyPasswordMatch = pathname.match(/^\/api\/collections\/([^/]+)\/verify-password$/);
                 if (verifyPasswordMatch) {
                   req.query.slug = verifyPasswordMatch[1];
-                  const { default: handler } = await server.ssrLoadModule('/api/collections/[slug]/verify-password.ts');
+                  const { default: handler } = await server.ssrLoadModule('/api/verify-password.ts');
                   return handler(req, res);
                 }
 
@@ -84,14 +84,14 @@ export default defineConfig(() => {
                 if (clickMatch) {
                   req.query.slug = clickMatch[1];
                   req.query.linkId = clickMatch[2];
-                  const { default: handler } = await server.ssrLoadModule('/api/collections/[slug]/links/[linkId]/click.ts');
+                  const { default: handler } = await server.ssrLoadModule('/api/click.ts');
                   return handler(req, res);
                 }
 
                 const collectionsMatch = pathname.match(/^\/api\/collections\/([^/]+)$/);
                 if (collectionsMatch) {
                   req.query.slug = collectionsMatch[1];
-                  const { default: handler } = await server.ssrLoadModule('/api/collections/[slug].ts');
+                  const { default: handler } = await server.ssrLoadModule('/api/get.ts');
                   return handler(req, res);
                 }
 

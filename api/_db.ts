@@ -76,7 +76,7 @@ export async function connectToMongo(): Promise<boolean> {
     return false;
   }
   
-  if (cached.conn && mongoose.connection.readyState >= 1) {
+  if (mongoose.connection.readyState >= 1) {
     mongooseConnected = true;
     return true;
   }
@@ -84,11 +84,8 @@ export async function connectToMongo(): Promise<boolean> {
   if (!cached.promise) {
     cached.promise = mongoose.connect(uri, {
       bufferCommands: false,
-      serverSelectionTimeoutMS: 3000,
-      connectTimeoutMS: 3000,
-    }).then((m) => m).catch((err) => {
-      cached.promise = null;
-      throw err;
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 5000,
     });
   }
 
@@ -97,7 +94,8 @@ export async function connectToMongo(): Promise<boolean> {
     mongooseConnected = true;
     return true;
   } catch (err) {
-    console.error("MongoDB fallback active:", err);
+    cached.promise = null; // Clear to allow retries on subsequent requests
+    console.error("MongoDB connection active failure:", err);
     mongooseConnected = false;
     return false;
   }
