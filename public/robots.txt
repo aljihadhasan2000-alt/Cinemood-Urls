@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Allow: /p/
+Allow: /success/
+Allow: /analytics/
+Allow: /about
+Allow: /privacy
+Allow: /terms
+Allow: /contact
+
+Sitemap: https://cinemoodurls.site/sitemap.xml

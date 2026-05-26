@@ -5,6 +5,8 @@ import { CreatorView } from "./components/CreatorView";
 import { SuccessView } from "./components/SuccessView";
 import { PublicView } from "./components/PublicView";
 import { AnalyticsView } from "./components/AnalyticsView";
+import { AboutView, PrivacyView, TermsView, ContactView } from "./components/StaticPages";
+import { Footer } from "./components/Footer";
 
 export default function App() {
   const [path, setPath] = useState(window.location.pathname);
@@ -44,6 +46,14 @@ export default function App() {
   } else if (cleanPath.startsWith("/analytics/")) {
     const slug = cleanPath.substring(11).trim();
     content = <AnalyticsView slug={slug} onNavigate={navigate} />;
+  } else if (cleanPath === "/about" || cleanPath === "/about/") {
+    content = <AboutView onNavigate={navigate} />;
+  } else if (cleanPath === "/privacy" || cleanPath === "/privacy/") {
+    content = <PrivacyView />;
+  } else if (cleanPath === "/terms" || cleanPath === "/terms/") {
+    content = <TermsView />;
+  } else if (cleanPath === "/contact" || cleanPath === "/contact/") {
+    content = <ContactView />;
   } else {
     // It is a direct public collections slug path, e.g. /[slug] or /p/[slug]
     let slug = cleanPath;
@@ -56,8 +66,18 @@ export default function App() {
     content = <PublicView slug={slug} />;
   }
 
-  // Determine if we should show the full header navigation (not needed in beautiful public landers)
-  const showNavbar = cleanPath === "/" || cleanPath === "" || cleanPath.startsWith("/success/") || cleanPath.startsWith("/analytics/");
+  // Determine if we should show the full header navigation
+  const isStaticOrAppRoute = 
+    cleanPath === "/" || 
+    cleanPath === "" || 
+    cleanPath.startsWith("/success/") || 
+    cleanPath.startsWith("/analytics/") ||
+    cleanPath === "/about" || cleanPath === "/about/" ||
+    cleanPath === "/privacy" || cleanPath === "/privacy/" ||
+    cleanPath === "/terms" || cleanPath === "/terms/" ||
+    cleanPath === "/contact" || cleanPath === "/contact/";
+
+  const showNavbar = isStaticOrAppRoute;
 
   return (
     <div className="relative min-h-screen bg-transparent select-none selection:bg-purple-glow/30 selection:text-white font-sans text-white overflow-hidden pb-16">
@@ -69,10 +89,14 @@ export default function App() {
       {showNavbar && <Navbar currentPath={path} onNavigate={navigate} />}
 
       {/* RENDER DYNAMIC PAGE CONTENT */}
-      <main className="relative z-10">
+      <main className="relative z-10 flex-grow min-h-[60vh]">
         {content}
       </main>
+
+      {/* BEAUTIFUL GLASS FOOTER */}
+      {showNavbar && <Footer onNavigate={navigate} />}
 
     </div>
   );
 }
+

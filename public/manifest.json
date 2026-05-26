@@ -1,0 +1,18 @@
+{
+  "short_name": "Cinemood",
+  "name": "Cinemood URLs - Cinematic Link Sharing Hub",
+  "description": "Premium cinematic multi-link sharing platform. Save and design gorgeous link collections with a premium, glowing mobile-first design.",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#080808",
+  "theme_color": "#8B5CF6",
+  "display": "standalone",
+  "orientation": "portrait"
+}
