@@ -240,42 +240,46 @@ export function ContactView() {
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [ticketId, setTicketId] = useState("");
+  const [submitError, setSubmitError] = useState("");
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!name || !email || !message) return;
 
     setSubmitting(true);
-    
-    // Simulate space frequency transmission
-    setTimeout(() => {
-      const generatedId = `CM-${Math.floor(1000 + Math.random() * 9000)}`;
-      setTicketId(generatedId);
-      setSubmitting(false);
-      setSuccess(true);
-      
-      // Save locally to a mock messages inbox for debugging purposes
-      try {
-        const existing = JSON.parse(localStorage.getItem("cinemood_feedback") || "[]");
-        existing.push({
-          id: generatedId,
-          name,
-          email,
-          category,
-          message,
-          timestamp: new Date().toISOString()
-        });
-        localStorage.setItem("cinemood_feedback", JSON.stringify(existing));
-      } catch (err) {
-        // ignore
-      }
+    setSubmitError("");
 
-      // Clear input fields
-      setName("");
-      setEmail("");
-      setMessage("");
-    }, 1500);
+    try {
+      const response = await fetch("https://formspree.io/f/mykvdbvz", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          category: category,
+          message: message.trim()
+        })
+      });
+
+      if (response.ok) {
+        setSuccess(true);
+        // Clear input fields
+        setName("");
+        setEmail("");
+        setMessage("");
+      } else {
+        const data = await response.json().catch(() => ({}));
+        const errMessage = data.error || (data.errors && data.errors.map((err: any) => err.message).join(", ")) || "Failed to transmit message.";
+        throw new Error(errMessage);
+      }
+    } catch (err: any) {
+      setSubmitError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -311,17 +315,17 @@ export function ContactView() {
             </div>
             <div>
               <h3 className="font-display text-xl tracking-wider text-white uppercase">Transmission Dispatched!</h3>
-              <p className="font-sans text-[11px] text-zinc-400 mt-1 max-w-sm mx-auto font-light leading-relaxed">
-                Your message has been labeled and broadcast successfully. Our crew will review your ticket within 24 standard earth rotatonal hours.
+              <p className="font-sans text-[13px] text-zinc-200 mt-2 max-w-sm mx-auto font-medium">
+                Message sent successfully
               </p>
-            </div>
-            <div className="inline-block px-4 py-2 bg-black/40 rounded-lg border border-white/5 font-mono text-[10px] text-zinc-400">
-              Ticket Coordinates: <span className="text-purple-glow font-bold">{ticketId}</span>
+              <p className="font-sans text-[11px] text-zinc-400 mt-1 max-w-sm mx-auto font-light leading-relaxed">
+                Our crew will review your support frequency signal and respond back shortly.
+              </p>
             </div>
             <div>
               <button 
                 onClick={() => setSuccess(false)}
-                className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 hover:text-white underline"
+                className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 hover:text-white underline cursor-pointer"
               >
                 Send Another Transmission
               </button>
@@ -329,11 +333,18 @@ export function ContactView() {
           </motion.div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5 font-sans">
+            {submitError && (
+              <div className="p-3.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-xs font-mono text-center">
+                {submitError}
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-[9px] font-mono uppercase tracking-wider text-zinc-500 mb-1.5 font-bold">Your ID / Name</label>
                 <input
                   type="text"
+                  name="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Captain Kubrick"
@@ -346,6 +357,7 @@ export function ContactView() {
                 <label className="block text-[9px] font-mono uppercase tracking-wider text-zinc-500 mb-1.5 font-bold">Contact Channel / Email</label>
                 <input
                   type="email"
+                  name="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="e.g. director@cinema.com"
@@ -358,6 +370,7 @@ export function ContactView() {
             <div>
               <label className="block text-[9px] font-mono uppercase tracking-wider text-zinc-500 mb-1.5 font-bold">Inquiry Broadcast Channel</label>
               <select
+                name="category"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full bg-[#111111] border border-white/5 rounded-xl px-4 py-3 text-xs text-zinc-300 focus:outline-none focus:border-purple-glow"
@@ -372,6 +385,7 @@ export function ContactView() {
             <div>
               <label className="block text-[9px] font-mono uppercase tracking-wider text-zinc-500 mb-1.5 font-bold">Your Transmission / Message</label>
               <textarea
+                name="message"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 rows={4}
