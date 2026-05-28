@@ -145,6 +145,25 @@ export function PublicView({ slug }: PublicViewProps) {
       console.error("Failed to track click:", e);
     }
 
+    // Softly handle user-friendly Popunder ONLY once per session after clicking card
+    const hasPopunderTriggered = sessionStorage.getItem("cinemood_popunder_triggered") === "true";
+    if (!hasPopunderTriggered) {
+      sessionStorage.setItem("cinemood_popunder_triggered", "true");
+      setTimeout(() => {
+        try {
+          const s = document.createElement("script");
+          s.dataset.zone = "11068559";
+          s.src = "https://al5sm.com/tag.min.js";
+          const container = [document.documentElement, document.body].filter(Boolean).pop();
+          if (container) {
+            container.appendChild(s);
+          }
+        } catch (err) {
+          console.error("Failed to softly load popunder:", err);
+        }
+      }, 700);
+    }
+
     // Handle hidden Smart Link behavior exactly as requested:
     // User clicks episode card -> Smart link opens once in new tab -> Original page remains unchanged -> After short delay continue to real download link
     const hasTriggered = sessionStorage.getItem("cinemood_smartlink_triggered") === "true";
