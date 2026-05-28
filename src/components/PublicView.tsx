@@ -29,6 +29,7 @@ export function PublicView({ slug }: PublicViewProps) {
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [copiedLink, setCopiedLink] = useState(false);
+  const [relatedCollections, setRelatedCollections] = useState<Collection[]>([]);
 
   // Private navigation helper to static pages for beautiful layout
   const navigate = (pathStr: string) => {
@@ -37,9 +38,40 @@ export function PublicView({ slug }: PublicViewProps) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Load public hub on mount or slug parameter change
+  // Load public hub on mount or slug parameter change with instant cached rendering
   useEffect(() => {
-    fetchCollection();
+    let active = true;
+    let hasLocalCache = false;
+
+    async function loadInstantCache() {
+      try {
+        const cached = await localStorageDb.getLocalOnly(slug);
+        if (cached && active) {
+          hasLocalCache = true;
+          if (cached.isPasswordProtected) {
+            const { links, ...partialCol } = cached;
+            setCollection(partialCol as any);
+          } else {
+            setCollection(cached);
+          }
+          // Display instantly
+          setLoading(false);
+        }
+      } catch (err) {
+        // Quiet
+      }
+
+      // Background reload / sync check from cloud registry
+      if (active) {
+        fetchCollection(!hasLocalCache);
+      }
+    }
+
+    loadInstantCache();
+
+    return () => {
+      active = false;
+    };
   }, [slug]);
 
   // SEO & Schema enhancement dynamically based on current page metadata
@@ -89,18 +121,20 @@ export function PublicView({ slug }: PublicViewProps) {
     }
   }, [collection, slug]);
 
-  const fetchCollection = () => {
+  const fetchCollection = async (showLoadingOverlay = true) => {
     try {
-      setLoading(true);
+      if (showLoadingOverlay) {
+        setLoading(true);
+      }
       setError("");
 
-      const col = localStorageDb.get(slug);
+      const col = await localStorageDb.get(slug);
       if (!col) {
         throw new Error("Collection not found.");
       }
 
-      // Increment view metrics locally
-      localStorageDb.incrementViews(slug);
+      // Increment view metrics across cloud registry
+      await localStorageDb.incrementViews(slug);
 
       if (col.isPasswordProtected) {
         // Exclude links list from state until correct passcode is verified
@@ -109,19 +143,34 @@ export function PublicView({ slug }: PublicViewProps) {
       } else {
         setCollection(col);
       }
+
+      // Load related collections in background
+      try {
+        const allCols = await localStorageDb.getAll();
+        setRelatedCollections(
+          allCols.filter(c => c.id !== slug && c.isPublic).slice(0, 3)
+        );
+      } catch (err) {
+        // Quiet
+      }
     } catch (e: any) {
-      setError(e.message || "Failed to load Cinemood Collection.");
+      // Only set error block if we don't have local cached representation as fallback
+      if (showLoadingOverlay) {
+        setError(e.message || "Failed to load Cinemood Collection.");
+      }
     } finally {
-      setLoading(false);
+      if (showLoadingOverlay) {
+        setLoading(false);
+      }
     }
   };
 
-  const handlePasswordSubmit = (e: FormEvent) => {
+  const handlePasswordSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setPasswordError("");
 
     try {
-      const col = localStorageDb.get(slug);
+      const col = await localStorageDb.get(slug);
       if (!col) {
         throw new Error("Collection not found.");
       }
@@ -139,8 +188,8 @@ export function PublicView({ slug }: PublicViewProps) {
 
   const handleLinkClick = (lnk: { id: string; title: string; url: string }) => {
     try {
-      // Increment click count locally
-      localStorageDb.incrementClickCount(slug, lnk.id);
+      // Increment click count safely in background
+      localStorageDb.incrementClickCount(slug, lnk.id).catch(() => {});
     } catch (e) {
       console.error("Failed to track click:", e);
     }
@@ -287,10 +336,6 @@ export function PublicView({ slug }: PublicViewProps) {
       </div>
     );
   }
-
-  const relatedCollections = localStorageDb.getAll()
-    .filter(col => col.id !== slug && col.isPublic)
-    .slice(0, 3);
 
   return (
     <div className="w-full min-h-screen flex flex-col justify-between selection:bg-purple-glow/30 selection:text-white pb-0 relative bg-black">

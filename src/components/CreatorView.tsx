@@ -58,10 +58,10 @@ export function CreatorView({ onGenerated }: CreatorViewProps) {
     fetchTrending();
   }, []);
 
-  const fetchTrending = () => {
+  const fetchTrending = async () => {
     try {
       setIsTrendingLoading(true);
-      const allCols = localStorageDb.getAll();
+      const allCols = await localStorageDb.getAll();
       const mapped: TrendingPage[] = allCols.map(col => ({
         id: col.id,
         title: col.title,
@@ -169,8 +169,8 @@ export function CreatorView({ onGenerated }: CreatorViewProps) {
         enableAnalytics: false // Removed complex stats pages
       };
 
-      // Store entirely on clientside sandbox!
-      localStorageDb.save(newCollection);
+      // Store entirely on cloud/hybrid database!
+      await localStorageDb.save(newCollection);
 
       setSuccessMessage("Cinemood URLs collection generated successfully!");
       setTimeout(() => {

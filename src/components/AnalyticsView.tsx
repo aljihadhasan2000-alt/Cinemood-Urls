@@ -36,12 +36,12 @@ export function AnalyticsView({ slug, onNavigate }: AnalyticsViewProps) {
     fetchAnalytics();
   }, [slug]);
 
-  const fetchAnalytics = () => {
+  const fetchAnalytics = async () => {
     try {
       setLoading(true);
       setError("");
 
-      const col = localStorageDb.get(slug);
+      const col = await localStorageDb.get(slug);
       if (!col) {
         throw new Error("Collection not found.");
       }
@@ -59,12 +59,12 @@ export function AnalyticsView({ slug, onNavigate }: AnalyticsViewProps) {
     }
   };
 
-  const handlePasswordSubmit = (e: FormEvent) => {
+  const handlePasswordSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setPasswordError("");
 
     try {
-      const col = localStorageDb.get(slug);
+      const col = await localStorageDb.get(slug);
       if (!col) {
         throw new Error("Collection not found.");
       }

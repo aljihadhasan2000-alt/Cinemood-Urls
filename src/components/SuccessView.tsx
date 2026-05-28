@@ -52,7 +52,7 @@ export function SuccessView({ slug, onNavigate }: SuccessViewProps) {
       setIsDeleting(true);
       setDeleteError("");
 
-      const success = localStorageDb.delete(slug);
+      const success = await localStorageDb.delete(slug);
       if (!success) {
         throw new Error("Could not find or delete collection in local storage.");
       }
