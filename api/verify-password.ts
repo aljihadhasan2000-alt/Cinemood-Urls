@@ -32,7 +32,7 @@ export default async function handler(req: any, res: any) {
       return res.status(401).json({ success: false, authorized: false, error: "Incorrect password shield code." });
     }
   } catch (error: any) {
-    console.error("Password verification error:", error);
+    console.log("Password verification offset:", error?.message || error);
     return res.status(500).json({ success: false, error: error.message || "Failed to verify access." });
   }
 }

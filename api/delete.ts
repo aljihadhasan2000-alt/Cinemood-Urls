@@ -16,7 +16,7 @@ export default async function handler(req: any, res: any) {
 
     return res.status(200).json({ success: true, message: "Collection deleted successfully." });
   } catch (error: any) {
-    console.error("Delete collection error:", error);
+    console.log("Delete collection offset:", error?.message || error);
     return res.status(500).json({ success: false, error: error.message || "Failed to remove collection." });
   }
 }

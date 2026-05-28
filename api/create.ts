@@ -19,7 +19,8 @@ export default async function handler(req: any, res: any) {
       enableQr, 
       enableAnalytics, 
       authorName,
-      isSync
+      isSync,
+      poster
     } = req.body;
 
     if (!title || !title.trim()) {
@@ -82,14 +83,18 @@ export default async function handler(req: any, res: any) {
       isPublic: isPublic !== false,
       enableQr: enableQr !== false,
       enableAnalytics: enableAnalytics !== false,
-      authorName: (authorName || "Cinemood Creator").trim()
+      authorName: (authorName || "Cinemood Creator").trim(),
+      poster: poster || ""
     };
 
-    await dbService.save(payload);
+    const isSaved = await dbService.save(payload);
+    if (!isSaved) {
+      return res.status(500).json({ success: false, error: "Database storage insertion failure, verify rejected." });
+    }
 
     return res.status(201).json({ success: true, collection: payload });
   } catch (error: any) {
-    console.error("Error creating Cinemood collection registry:", error);
+    console.log("Error creating Cinemood collection registry:", error?.message || error);
     return res.status(500).json({ success: false, error: error.message || "Failed to create public registry." });
   }
 }

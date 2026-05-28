@@ -12,7 +12,7 @@ export default async function handler(req: any, res: any) {
     await dbService.incrementClickCount(cleanSlug, String(linkId));
     return res.status(200).json({ success: true });
   } catch (error: any) {
-    console.error("Click count increase failure:", error);
+    console.log("Click count increase offset:", error?.message || error);
     return res.status(500).json({ success: false, error: error.message || "Failed to log click interaction." });
   }
 }

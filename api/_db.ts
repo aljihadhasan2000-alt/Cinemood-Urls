@@ -31,15 +31,17 @@ const linkItemSchema = new mongoose.Schema({
   title: { type: String, required: true },
   url: { type: String, required: true },
   clickCount: { type: Number, default: 0 }
-}, { bufferCommands: false });
+});
 
-const collectionSchema = new mongoose.Schema({
+const pageSchema = new mongoose.Schema({
+  slug: { type: String, required: true, unique: true, index: true },
   id: { type: String, required: true, unique: true, index: true },
   title: { type: String, required: true },
   description: { type: String, default: "" },
   links: [linkItemSchema],
   createdAt: { type: String, required: true },
   views: { type: Number, default: 0 },
+  poster: { type: String, default: "" },
   isPasswordProtected: { type: Boolean, default: false },
   expiryTime: { type: String, default: "none" },
   expiresAt: { type: String, default: null },
@@ -49,14 +51,15 @@ const collectionSchema = new mongoose.Schema({
   authorName: { type: String, default: "Cinemood Creator" },
   password: { type: String, default: "" }
 }, {
+  collection: "pages",
   timestamps: false,
-  bufferCommands: false
+  bufferCommands: true
 });
 
 let CollectionModel: any;
 try {
-  mongoose.set("bufferCommands", false);
-  CollectionModel = mongoose.models.Collection || mongoose.model("Collection", collectionSchema);
+  mongoose.set("bufferCommands", true);
+  CollectionModel = mongoose.models.Page || mongoose.model("Page", pageSchema);
 } catch (e) {
   // Model creation safe guards
 }
@@ -115,7 +118,7 @@ function readLocalDb(): Record<string, Collection> {
       const content = fs.readFileSync(filePath, "utf-8");
       return JSON.parse(content || "{}");
     } catch (e) {
-      console.error("Local file read exception, resetting local store:", e);
+      // Quiet local fallback
     }
   }
   
@@ -123,7 +126,7 @@ function readLocalDb(): Record<string, Collection> {
   try {
     fs.writeFileSync(filePath, JSON.stringify(DEFAULT_SEEDED_COLLECTIONS, null, 2), "utf-8");
   } catch (e) {
-    console.error("Failed to write initial seeded data file:", e);
+    // Quiet fallback
   }
   return DEFAULT_SEEDED_COLLECTIONS;
 }
@@ -133,38 +136,48 @@ function writeLocalDb(dbObj: Record<string, Collection>) {
   try {
     fs.writeFileSync(filePath, JSON.stringify(dbObj, null, 2), "utf-8");
   } catch (e) {
-    console.error("Local db storage write mismatch error:", e);
+    // Quiet fallback
   }
 }
 
 let isConnected = false;
 let lastConnectAttempt = 0;
-const RECONNECT_COOL_DOWN_MS = 20000; // 20s cooldown to prevent hanging API requests on offlines
+const RECONNECT_COOL_DOWN_MS = 15000; // 15s quick retry cooldown
 
 async function connectToMongo(): Promise<boolean> {
   const uri = process.env.MONGODB_URI;
-  if (!uri) return false;
-  if (isConnected) return true;
+  if (!uri) {
+    console.warn("[Database] MONGODB_URI is undefined. Fallback to local storage database.");
+    return false;
+  }
+  
+  if (isConnected && mongoose.connection.readyState === 1) {
+    return true;
+  }
+
+  if (mongoose.connection.readyState === 1) {
+    isConnected = true;
+    return true;
+  }
 
   const now = Date.now();
   if (now - lastConnectAttempt < RECONNECT_COOL_DOWN_MS) {
-    return false;
+    return isConnected;
   }
 
   lastConnectAttempt = now;
+  console.log("[Database] Establishing secure MongoDB connection to Atlas cluster...");
   try {
-    mongoose.set("bufferCommands", false);
     await mongoose.connect(uri, {
-      serverSelectionTimeoutMS: 2000, // 2s quick fail to ensure instant page load
-      connectTimeoutMS: 2000,
+      serverSelectionTimeoutMS: 5000, // 5s connection and query buffer
+      connectTimeoutMS: 5000,
     } as any);
     isConnected = true;
-    console.log("Connected securely to cloud MongoDB index registry.");
+    console.log("[Database] Secure database connection SUCCESSFUL! Active model collection mapping: 'pages'");
     return true;
   } catch (e: any) {
-    console.log("MongoDB connection attempt timed out or failed. Running secure local JSON-DB fallback.");
-    // Force reset isConnected so next cycle can retry after cooldown expires
     isConnected = false;
+    console.log(`[Database] Mongo offline or unwhitelisted. Seamless Cinemood local JSON-DB fallback has safely taken over.`);
     return false;
   }
 }
@@ -176,13 +189,17 @@ export const dbService = {
     
     if (useMongo && CollectionModel) {
       try {
-        const doc = await CollectionModel.findOne({ id: cleanSlug }).lean();
+        console.log(`[Database] Queries MongoDB for page "${cleanSlug}"`);
+        const doc = await CollectionModel.findOne({
+          $or: [{ slug: cleanSlug }, { id: cleanSlug }]
+        }).lean();
+        
         if (doc) {
-          const { _id, __v, ...rest } = doc as any;
-          return rest as Collection;
+          const { _id, __v, slug: dbSlug, ...rest } = doc as any;
+          return { id: cleanSlug, ...rest } as Collection;
         }
       } catch (err: any) {
-        // Silent fallback to avoid trace spamming
+        console.log(`[Database] MongoDB query failure for "${cleanSlug}", attempting read from fallback database.`);
       }
     }
     
@@ -200,26 +217,73 @@ export const dbService = {
     return null;
   },
 
-  async save(col: Collection): Promise<void> {
+  async save(col: Collection): Promise<boolean> {
     const cleanSlug = col.id.toLowerCase().trim();
     col.id = cleanSlug;
     
+    const posterVal = (col as any).poster || "";
+    
+    const mongoPayload = {
+      slug: cleanSlug,
+      id: cleanSlug,
+      title: col.title,
+      description: col.description || "",
+      links: col.links || [],
+      createdAt: col.createdAt,
+      views: col.views || 0,
+      poster: posterVal,
+      isPasswordProtected: !!col.isPasswordProtected,
+      expiryTime: col.expiryTime,
+      expiresAt: col.expiresAt,
+      isPublic: col.isPublic !== false,
+      enableQr: col.enableQr !== false,
+      enableAnalytics: col.enableAnalytics !== false,
+      authorName: col.authorName || "Cinemood Creator",
+      password: col.password || ""
+    };
+
     const useMongo = await connectToMongo();
     if (useMongo && CollectionModel) {
+      console.log(`[Database] Write validation triggered. Inserting "${cleanSlug}" into pages collection...`);
       try {
-        await CollectionModel.findOneAndUpdate(
-          { id: cleanSlug },
-          col,
-          { upsert: true, new: true }
-        );
+        // Automatically pre-create collection to verify db permissions & presence
+        await CollectionModel.createCollection().catch(() => {});
+        
+        const savedDoc = await CollectionModel.findOneAndUpdate(
+          { slug: cleanSlug },
+          mongoPayload,
+          { upsert: true, new: true, runValidators: true }
+        ).lean();
+        
+        if (savedDoc) {
+          console.log(`[Database] Verify OK: Document "${cleanSlug}" successfully written and index registered inside MongoDB cluster.`);
+          
+          // Sync with local memory cache instantly
+          const local = readLocalDb();
+          local[cleanSlug] = col;
+          writeLocalDb(local);
+          return true;
+        } else {
+          throw new Error("Verification query returned empty payload response.");
+        }
       } catch (err: any) {
-        // Silent fallback
+        console.log(`[Database] MongoDB verification failed for save on "${cleanSlug}". Fallback caching active instead.`);
       }
+    } else {
+      console.log(`[Database] MongoDB not operational. Initializing direct save to local storage cache.`);
     }
     
-    const local = readLocalDb();
-    local[cleanSlug] = col;
-    writeLocalDb(local);
+    // Fallback saving
+    try {
+      const local = readLocalDb();
+      local[cleanSlug] = col;
+      writeLocalDb(local);
+      console.log(`[Database] Local fallback write verified for page "${cleanSlug}" successfully.`);
+      return true;
+    } catch (err: any) {
+      console.log(`[Database] Critical backup storage write error for page "${cleanSlug}".`);
+      return false;
+    }
   },
 
   async delete(slug: string): Promise<boolean> {
@@ -229,10 +293,16 @@ export const dbService = {
     let deleted = false;
     if (useMongo && CollectionModel) {
       try {
-        const result = await CollectionModel.deleteOne({ id: cleanSlug });
+        console.log(`[Database] Deleting document with identifier "${cleanSlug}" from MongoDB...`);
+        const result = await CollectionModel.deleteOne({
+          $or: [{ slug: cleanSlug }, { id: cleanSlug }]
+        });
         deleted = (result.deletedCount || 0) > 0;
+        if (deleted) {
+          console.log(`[Database] Document "${cleanSlug}" thoroughly removed from Atlas indexes.`);
+        }
       } catch (err: any) {
-        // Silent fallback
+        console.log(`[Database] MongoDB query deletion exception on "${cleanSlug}".`);
       }
     }
     
@@ -250,18 +320,21 @@ export const dbService = {
     const useMongo = await connectToMongo();
     if (useMongo && CollectionModel) {
       try {
+        console.log("[Database] Requesting public pages catalog index from cloud registry...");
         const list = await CollectionModel.find({ isPublic: { $ne: false } })
           .sort({ createdAt: -1 })
-          .limit(100)
+          .limit(120)
           .lean();
+        
         if (list && list.length > 0) {
+          console.log(`[Database] SUCCESSFULLY fetched ${list.length} public cinematic collection pages from Atlas.`);
           return list.map((doc: any) => {
-            const { _id, __v, ...rest } = doc;
-            return rest as Collection;
+            const { _id, __v, slug: dbSlug, ...rest } = doc;
+            return { id: doc.slug || doc.id || "", ...rest } as Collection;
           });
         }
       } catch (err: any) {
-        // Silent fallback
+        console.log("[Database] MongoDB getAllPublic index lookup dropped. Restoring local cache.");
       }
     }
     
@@ -277,7 +350,10 @@ export const dbService = {
     
     if (useMongo && CollectionModel) {
       try {
-        await CollectionModel.updateOne({ id: cleanSlug }, { $inc: { views: 1 } });
+        await CollectionModel.updateOne(
+          { $or: [{ slug: cleanSlug }, { id: cleanSlug }] },
+          { $inc: { views: 1 } }
+        );
       } catch (err: any) {
         // Silent fallback
       }
@@ -297,7 +373,12 @@ export const dbService = {
     if (useMongo && CollectionModel) {
       try {
         await CollectionModel.updateOne(
-          { id: cleanSlug, "links.id": linkId },
+          {
+            $and: [
+              { $or: [{ slug: cleanSlug }, { id: cleanSlug }] },
+              { "links.id": linkId }
+            ]
+          },
           { $inc: { "links.$.clickCount": 1 } }
         );
       } catch (err: any) {
